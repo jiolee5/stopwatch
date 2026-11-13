@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>픽셀 스탑워치</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css" rel="stylesheet">
+<style>
+  :root {
+    --text: #ffffff;
+    --muted: rgba(255, 255, 255, .68);
+    --glass: rgba(20, 14, 48, .34);
+    --glass-border: rgba(255, 255, 255, .18);
+    --start: 52, 199, 89;
+    --stop: 255, 69, 58;
+    --best: #7dffa8;
+    --worst: #ff9a9a;
+    --accent: #ffe08a;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: #07071f;
+    color: var(--text);
+    font-family: 'Galmuri11', 'Malgun Gothic', sans-serif;
+    -webkit-font-smoothing: none;
+  }
+  #bg {
+    position: fixed; inset: 0;
+    width: 100vw; height: 100vh;
+    image-rendering: pixelated;
+    z-index: 0;
+  }
+  .wrap {
+    position: relative; z-index: 1;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 40px 16px 48px;
+  }
+  .panel {
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .35);
+  }
+  .main { padding: 26px 22px 22px; }
+  .title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px; letter-spacing: 2px;
+    text-align: center; color: var(--muted);
+    margin: 0 0 14px;
+  }
+  .display {
+    font-family: 'Press Start 2P', monospace;
+    font-size: clamp(26px, 8.5vw, 46px);
+    text-align: center;
+    margin: 6px 0 26px;
+    text-shadow: 0 0 14px rgba(255, 110, 200, .55), 3px 3px 0 rgba(90, 30, 120, .85);
+    white-space: nowrap;
+  }
+  .controls { display: flex; justify-content: center; gap: 48px; }
+  button {
+    width: 84px; height: 84px;
+    border-radius: 50%;
+    font: inherit; font-size: 15px;
+    color: #fff;
+    cursor: pointer;
+    background: rgba(255, 255, 255, .10);
+    border: 1px solid rgba(255, 255, 255, .28);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 6px 20px rgba(0, 0, 0, .25);
+    transition: background .2s, border-color .2s, transform .08s, opacity .2s;
+  }
+  button:hover:not(:disabled) { background: rgba(255, 255, 255, .18); }
+  button:active:not(:disabled) { transform: scale(.95); }
+  button:disabled { opacity: .35; cursor: default; }
+  #startBtn { background: rgba(var(--start), .22); border-color: rgba(var(--start), .6); }
+  #startBtn:hover { background: rgba(var(--start), .32); }
+  #startBtn.running { background: rgba(var(--stop), .22); border-color: rgba(var(--stop), .6); }
+  #startBtn.running:hover { background: rgba(var(--stop), .32); }
+
+  .stage-wrap { margin-top: 24px; }
+  .route {
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px; color: var(--muted);
+    margin: 0 2px 8px;
+  }
+  .route .dots { letter-spacing: 4px; color: var(--accent); }
+  #stage {
+    display: block;
+    width: 100%;
+    aspect-ratio: 200 / 72;
+    image-rendering: pixelated;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+  }
+  .status {
+    display: flex; justify-content: space-between; flex-wrap: wrap;
+    gap: 6px 12px;
+    font-size: 12px;
+    margin-top: 10px;
+    color: var(--muted);
+  }
+  .status b { color: var(--accent); font-weight: normal; }
+
+  .laps { margin-top: 16px; padding: 4px 20px; }
+  .laps:has(ul:empty) { display: none; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li {
+    display: flex; justify-content: space-between;
+    padding: 12px 2px;
+    border-top: 1px solid rgba(255, 255, 255, .10);
+    font-size: 14px;
+  }
+  li:first-child { border-top: none; }
+  li span:last-child { font-family: 'Press Start 2P', monospace; font-size: 11px; }
+  li.best { color: var(--best); }
+  li.worst { color: var(--worst); }
+  .hint {
+    text-align: center; color: var(--muted);
+    font-size: 12px; margin-top: 20px;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, .6);
+  }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+
+<div class="wrap">
+  <section class="panel main">
+    <p class="title">PIXEL STOPWATCH</p>
+    <div class="display" id="display">00:00.00</div>
+    <div class="controls">
+      <button id="lapBtn" disabled>랩</button>
+      <button id="startBtn">시작</button>
+    </div>
+
+    <div class="stage-wrap">
+      <div class="route"><span>HONG KONG</span><span class="dots">&gt;&gt;&gt;</span><span>MACAU</span></div>
+      <canvas id="stage"></canvas>
+      <div class="status">
+        <span>남은 거리 <b id="dist">60.00 km</b></span>
+        <span id="quip"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel laps"><ul id="laps"></ul></section>
+
+  <p class="hint">Space: 시작/정지 · L: 랩 · R: 리셋</p>
+</div>
+
+<script>
+/* ---------- 공통 유틸 ---------- */
+const $ = id => document.getElementById(id);
+function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function rng(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// 디더링된 픽셀 그라데이션
+function paintBands(ctx, w, y0, y1, colors) {
+  const h = y1 - y0; if (h <= 0) return;
+  const img = ctx.createImageData(w, h);
+  const rgb = colors.map(hexRgb), n = colors.length - 1;
+  const bayer = [0.2, 0.6, 0.8, 0.4];
+  for (let y = 0; y < h; y++) {
+    const t = y / Math.max(1, h - 1) * n;
+    const i = Math.min(n - 1, Math.floor(t)), f = t - i;
+    for (let x = 0; x < w; x++) {
+      const c = rgb[f > bayer[(x & 1) + ((y & 1) << 1)] ? i + 1 : i];
+      const o = (y * w + x) * 4;
+      img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, y0);
+}
+function pixLine(ctx, x0, y0, x1, y1) {
+  x0 |= 0; y0 |= 0; x1 |= 0; y1 |= 0;
+  const dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+  const dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  for (let k = 0; k < 2000; k++) {
+    ctx.fillRect(x0, y0, 1, 1);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+
+/* ---------- 배경: 홍콩 빅토리아 하버 야경 ---------- */
+const bg = $('bg'), bctx = bg.getContext('2d');
+const PX = 3;
+let B = null;
+
+function buildBg() {
+  const W = Math.ceil(innerWidth / PX), H = Math.ceil(innerHeight / PX);
+  bg.width = W; bg.height = H;
+  const R = rng(7);
+  const st = document.createElement('canvas'); st.width = W; st.height = H;
+  const s = st.getContext('2d');
+  const hz = Math.floor(H * 0.72);
+
+  // 하늘
+  paintBands(s, W, 0, hz, ['#07071f', '#0d0b2e', '#17113f', '#25164d', '#3a1b5a', '#5a2264', '#86306a']);
+
+  // 달
+  const mx = Math.floor(W * 0.84), my = Math.floor(H * 0.12);
+  s.fillStyle = '#fff3c4';
+  for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) if (dx * dx + dy * dy <= 26) s.fillRect(mx + dx, my + dy, 1, 1);
+  s.fillStyle = '#e6d595';
+  s.fillRect(mx - 2, my - 1, 2, 2); s.fillRect(mx + 2, my + 2, 1, 1); s.fillRect(mx + 1, my - 3, 1, 1);
+
+  // 빅토리아 피크 산등성이
+  s.fillStyle = '#1a1236';
+  for (let x = 0; x < W; x++) {
+    const h = H * 0.2 + Math.sin(x * 0.012 + 0.5) * H * 0.07 + Math.sin(x * 0.035 + 2) * H * 0.025 + Math.sin(x * 0.11) * H * 0.006;
+    s.fillRect(x, Math.floor(hz - h), 1, Math.ceil(h));
+  }
+
+  // 뒷줄 빌딩
+  let x = 0;
+  while (x < W) {
+    const w = 4 + Math.floor(R() * 10), h = Math.floor(H * (0.07 + R() * 0.16));
+    s.fillStyle = '#2a1f58'; s.fillRect(x, hz - h, w, h);
+    s.fillStyle = '#5a4c94';
+    for (let wy = hz - h + 2; wy < hz - 1; wy += 3) for (let wx = x + 1; wx < x + w - 1; wx += 2) if (R() < 0.18) s.fillRect(wx, wy, 1, 1);
+    x += w + (R() < 0.3 ? 1 : 0);
+  }
+
+  // 앞줄 빌딩 + 창문 + 네온
+  const flick = [], neon = [];
+  const fcols = ['#120d2c', '#161036', '#1b1440'];
+  const wcols = ['#ffd27a', '#ffe7ad', '#9fd8ff', '#ffb36b'];
+  const ncols = ['#ff3d7f', '#3df2ff', '#ffcf3d', '#ff5a3d', '#b06bff'];
+  x = -2;
+  while (x < W) {
+    const w = 6 + Math.floor(R() * 12), h = Math.floor(H * (0.1 + R() * 0.24)), top = hz - h;
+    const col = fcols[Math.floor(R() * 3)];
+    s.fillStyle = col; s.fillRect(x, top, w, h);
+    if (R() < 0.4) s.fillRect(x + Math.floor(w / 2), top - 3, 1, 3);
+    const lit = R() * 0.45 + 0.1;
+    for (let wy = top + 2; wy < hz - 2; wy += 3) for (let wx = x + 1; wx < x + w - 1; wx += 2) {
+      if (R() < lit) {
+        const c = wcols[Math.floor(R() * wcols.length)];
+        s.fillStyle = c; s.fillRect(wx, wy, 1, 2);
+        if (R() < 0.06) flick.push({ x: wx, y: wy, c, off: col, on: true });
+      }
+    }
+    if (R() < 0.4 && h > H * 0.14) {
+      const vertical = R() < 0.6;
+      const nw = vertical ? 2 : 4 + Math.floor(R() * 4), nh = vertical ? 4 + Math.floor(R() * 5) : 2;
+      neon.push({
+        x: x + 1 + Math.floor(R() * Math.max(1, w - nw - 1)), y: top + 3 + Math.floor(R() * 6),
+        w: nw, h: nh, c: ncols[Math.floor(R() * ncols.length)],
+        sp: 0.6 + R() * 2.2, ph: R() * 6, off: col
+      });
+    }
+    x += w + (R() < 0.25 ? 1 : 0);
+  }
+
+  // 중국은행 타워
+  const bx = Math.floor(W * 0.40), bw = 12, bh = Math.floor(H * 0.44), bt = hz - bh;
+  s.fillStyle = '#1d2547';
+  s.fillRect(bx, bt + 6, bw, bh - 6);
+  for (let i = 0; i < 6; i++) s.fillRect(bx, bt + i, 2 + i * 2, 1);
+  s.fillRect(bx, bt - 5, 1, 5); s.fillRect(bx + 2, bt - 3, 1, 3);
+  s.fillStyle = '#9fb0ee';
+  for (let y = bt + 6; y + 9 < hz; y += 10) { pixLine(s, bx, y, bx + bw - 1, y + 9); pixLine(s, bx + bw - 1, y, bx, y + 9); }
+  pixLine(s, bx, bt, bx + bw - 1, bt + 5);
+
+  // IFC
+  const ix = Math.floor(W * 0.63), iw = 10, ih = Math.floor(H * 0.52), it = hz - ih;
+  s.fillStyle = '#1f2d52';
+  s.fillRect(ix, it + 8, iw, ih - 8); s.fillRect(ix + 1, it + 4, iw - 2, 4); s.fillRect(ix + 2, it + 1, iw - 4, 3);
+  s.fillRect(ix + 2, it - 2, 1, 3); s.fillRect(ix + iw - 3, it - 2, 1, 3);
+  s.fillStyle = '#6fc3ff';
+  for (let y = it + 9; y < hz - 1; y += 2) {
+    s.fillRect(ix + 2, y, 1, 1); s.fillRect(ix + iw - 3, y, 1, 1);
+    if (R() < 0.5) s.fillRect(ix + 4, y, 2, 1);
+  }
+
+  // 해안선 + 바다
+  s.fillStyle = '#3a2b66'; s.fillRect(0, hz, W, 1);
+  paintBands(s, W, hz + 1, H, ['#140e36', '#0e0a2a', '#08061c']);
+  const d = H - hz - 1;
+  const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = d;
+  tmp.getContext('2d').drawImage(st, 0, hz - d, W, d, 0, 0, W, d);
+  s.save(); s.globalAlpha = 0.28; s.translate(0, hz + 1 + d); s.scale(1, -1); s.drawImage(tmp, 0, 0); s.restore();
+  s.fillStyle = 'rgba(0,0,0,.25)';
+  for (let y = hz + 2; y < H; y += 2) s.fillRect(0, y, W, 1);
+
+  // 동적 요소
+  const stars = [];
+  for (let i = 0; i < 70; i++) {
+    const sx = Math.floor(R() * W), sy = Math.floor(R() * H * 0.18);
+    if (Math.abs(sx - mx) < 8 && Math.abs(sy - my) < 8) continue;
+    stars.push({ x: sx, y: sy, sp: 0.5 + R() * 2, ph: R() * 6 });
+  }
+  const shim = [];
+  for (let i = 0; i < 90; i++) shim.push({
+    x: R() * W, y: hz + 2 + Math.floor(R() * Math.max(1, d - 2)),
+    len: 1 + Math.floor(R() * 4), c: wcols[Math.floor(R() * wcols.length)],
+    sp: (R() - 0.5) * 3, ph: R() * 6
+  });
+  const lasers = [
+    { x: ix + 2, y: it - 2, c: '#5dff9e', k: 0 },
+    { x: ix + iw - 3, y: it - 2, c: '#5de1ff', k: 1.7 },
+    { x: bx, y: bt - 5, c: '#ff6bd6', k: 3.1 },
+  ];
+  B = { W, H, hz, st, stars, flick, neon, shim, lasers };
+}
+
+function drawBg(t) {
+  const { W, H, hz, st, stars, flick, neon, shim, lasers } = B;
+  bctx.drawImage(st, 0, 0);
+
+  for (const s of stars) {
+    const v = Math.sin(t * s.sp + s.ph);
+    if (v > -0.3) { bctx.fillStyle = v > 0.7 ? '#ffffff' : '#9a93d6'; bctx.fillRect(s.x, s.y, 1, 1); }
+  }
+
+  // 심포니 오브 라이트 (주기적으로 레이저)
+  if (t % 16 < 7) {
+    bctx.globalAlpha = 0.4;
+    for (const l of lasers) {
+      const a = -Math.PI / 2 + Math.sin(t * 0.8 + l.k) * 0.7;
+      const len = H * 0.6;
+      bctx.fillStyle = l.c;
+      pixLine(bctx, l.x, l.y, l.x + Math.cos(a) * len, l.y + Math.sin(a) * len);
+    }
+    bctx.globalAlpha = 1;
+  }
+
+  for (const f of flick) {
+    if (Math.random() < 0.004) f.on = !f.on;
+    if (!f.on) { bctx.fillStyle = f.off; bctx.fillRect(f.x, f.y, 1, 2); }
+  }
+  for (const n of neon) {
+    const on = Math.sin(t * n.sp + n.ph) > -0.5;
+    if (on) {
+      bctx.fillStyle = n.c;
+      bctx.globalAlpha = 0.25; bctx.fillRect(n.x - 1, n.y - 1, n.w + 2, n.h + 2);
+      bctx.globalAlpha = 1; bctx.fillRect(n.x, n.y, n.w, n.h);
+    } else {
+      bctx.fillStyle = n.off; bctx.fillRect(n.x, n.y, n.w, n.h);
+    }
+  }
+
+  // 물결 반짝임
+  for (const s of shim) {
+    if (Math.sin(t * 2 + s.ph) < -0.2) continue;
+    const x = ((s.x + t * s.sp) % W + W) % W;
+    bctx.globalAlpha = 0.5; bctx.fillStyle = s.c; bctx.fillRect(Math.floor(x), s.y, s.len, 1);
+  }
+  bctx.globalAlpha = 1;
+
+  // 정크선
+  const by = hz + Math.floor((H - hz) * 0.38);
+  const bx = Math.floor((t * 5) % (W + 60)) - 30;
+  bctx.fillStyle = '#3a2418';
+  bctx.fillRect(bx, by, 16, 2); bctx.fillRect(bx + 1, by + 2, 14, 1); bctx.fillRect(bx + 14, by - 1, 3, 1);
+  bctx.fillRect(bx + 7, by - 11, 1, 11);
+  bctx.fillStyle = '#c8402e'; bctx.fillRect(bx + 3, by - 10, 4, 8); bctx.fillRect(bx + 8, by - 8, 4, 6);
+  bctx.fillStyle = '#8a2a20';
+  for (let k = 0; k < 4; k++) bctx.fillRect(bx + 3, by - 9 + k * 2, 4, 1);
+  for (let k = 0; k < 3; k++) bctx.fillRect(bx + 8, by - 7 + k * 2, 4, 1);
+  bctx.fillStyle = '#ffd27a'; bctx.fillRect(bx + 2, by, 1, 1); bctx.fillRect(bx + 12, by, 1, 1);
+}
+
+/* ---------- 하단 스테이지: 직장인 → 마카오 ---------- */
+const stg = $('stage'), sctx = stg.getContext('2d');
+const SW = 200, SH = 72, GY = 60;
+stg.width = SW; stg.height = SH;
+const TAU = 30;          // 진행 속도 (초)
+const START_X = 4, END_X = 134;
+const RUINS_X = 156;
+
+function drawRuins(g, x0) {
+  const S = '#dcbc8c', D = '#b38f62', L = '#f0d6a6', O = '#c96d63';
+  const cx = x0 + 18;
+  // 계단
+  g.fillStyle = D; g.fillRect(x0 - 6, GY - 2, 46, 2); g.fillStyle = L; g.fillRect(x0 - 6, GY - 2, 46, 1);
+  g.fillStyle = D; g.fillRect(x0 - 3, GY - 4, 40, 2); g.fillStyle = L; g.fillRect(x0 - 3, GY - 4, 40, 1);
+  // 1층
+  g.fillStyle = S; g.fillRect(x0, 40, 36, 16);
+  g.fillStyle = O;
+  g.fillRect(cx - 3, 45, 6, 11); g.fillRect(cx - 2, 44, 4, 1);
+  g.fillRect(x0 + 5, 48, 4, 8); g.fillRect(x0 + 6, 47, 2, 1);
+  g.fillRect(x0 + 27, 48, 4, 8); g.fillRect(x0 + 28, 47, 2, 1);
+  for (const c of [1, 11, 24, 34]) { g.fillStyle = L; g.fillRect(x0 + c, 40, 1, 16); g.fillStyle = D; g.fillRect(x0 + c + 1, 40, 1, 16); }
+  g.fillStyle = L; g.fillRect(x0 - 1, 38, 38, 1); g.fillStyle = D; g.fillRect(x0 - 1, 39, 38, 1);
+  // 2층
+  g.fillStyle = S; g.fillRect(x0 + 2, 29, 32, 9);
+  g.fillStyle = O;
+  g.fillRect(x0 + 7, 31, 3, 5); g.fillRect(cx - 2, 30, 4, 7); g.fillRect(x0 + 26, 31, 3, 5);
+  for (const c of [3, 13, 22, 32]) { g.fillStyle = L; g.fillRect(x0 + c, 29, 1, 9); }
+  g.fillStyle = D; g.fillRect(x0 + 1, 28, 34, 1);
+  // 3층
+  g.fillStyle = S; g.fillRect(x0 + 6, 20, 24, 8);
+  g.fillStyle = O; g.fillRect(cx - 2, 21, 4, 6); g.fillRect(x0 + 9, 23, 2, 3); g.fillRect(x0 + 25, 23, 2, 3);
+  g.fillStyle = D; g.fillRect(x0 + 4, 25, 2, 3); g.fillRect(x0 + 30, 25, 2, 3); g.fillRect(x0 + 5, 19, 26, 1);
+  // 박공
+  g.fillStyle = S;
+  for (let i = 0; i < 10; i++) g.fillRect(cx - 1 - i, 9 + i, 2 + i * 2, 1);
+  g.fillStyle = O; g.fillRect(cx - 1, 13, 2, 3); g.fillRect(cx - 2, 14, 4, 1);
+  // 십자가
+  g.fillStyle = '#8f6d4a'; g.fillRect(cx - 1, 2, 2, 7); g.fillRect(cx - 3, 4, 6, 1);
+}
+
+function buildStage() {
+  const c = document.createElement('canvas'); c.width = SW; c.height = SH;
+  const g = c.getContext('2d');
+  const R = rng(3);
+  paintBands(g, SW, 0, GY, ['#2b1d55', '#46286a', '#743872', '#b0526f', '#de7a62', '#f4a85c']);
+  // 노을 해
+  for (let dy = -10; dy <= 10; dy++) for (let dx = -10; dx <= 10; dx++) {
+    const r2 = dx * dx + dy * dy;
+    if (r2 <= 100) { g.fillStyle = r2 <= 40 ? '#fff0c0' : '#ffd88a'; g.fillRect(70 + dx, 44 + dy, 1, 1); }
+  }
+  // 구름
+  g.fillStyle = '#f6b98a';
+  [[20, 14, 14, 2], [24, 12, 8, 2], [108, 9, 18, 2], [114, 7, 8, 2], [150, 20, 12, 2], [62, 26, 10, 1]].forEach(r => g.fillRect(...r));
+  // 마카오 타워
+  g.fillStyle = '#5b3a73';
+  g.fillRect(32, 6, 1, 12); g.fillRect(30, 18, 5, 2); g.fillRect(28, 20, 9, 2); g.fillRect(31, 22, 3, 30);
+  // 그랜드 리스보아
+  g.fillStyle = '#6a4378';
+  g.fillRect(108, 44, 26, 8); g.fillRect(110, 42, 22, 2); g.fillRect(113, 40, 16, 2);
+  g.fillRect(118, 20, 6, 20); g.fillRect(117, 17, 8, 3); g.fillRect(116, 14, 10, 3);
+  g.fillRect(115, 10, 2, 4); g.fillRect(120, 8, 2, 6); g.fillRect(125, 10, 2, 4);
+  g.fillStyle = '#e8b84a';
+  for (let y = 21; y < 40; y += 2) { g.fillRect(119, y, 1, 1); g.fillRect(122, y, 1, 1); }
+  g.fillRect(117, 15, 8, 1);
+  // 먼 건물들
+  g.fillStyle = '#4b2f64';
+  let x = 0;
+  while (x < SW) { const w = 5 + Math.floor(R() * 10), h = 4 + Math.floor(R() * 9); g.fillRect(x, GY - h, w, h); x += w; }
+  g.fillStyle = '#f2c46d';
+  for (let i = 0; i < 40; i++) g.fillRect(Math.floor(R() * SW), GY - 2 - Math.floor(R() * 8), 1, 1);
+  // 칼사다 포르투게사 (마카오 물결 바닥)
+  g.fillStyle = '#ece0c4'; g.fillRect(0, GY, SW, SH - GY);
+  g.fillStyle = '#d4c3a0'; g.fillRect(0, GY, SW, 1);
+  g.fillStyle = '#3a3346';
+  for (let i = 0; i < SW; i++) for (const k of [0, 5]) {
+    const y = GY + 3 + k + Math.round(1.5 * Math.sin(i / 3));
+    if (y < SH) g.fillRect(i, y, 1, 1);
+  }
+  drawRuins(g, RUINS_X);
+  return c;
+}
+const stageStatic = buildStage();
+
+// 직장인 스프라이트 (13x16, 오른쪽을 봄)
+const PAL = { k: '#2b2233', s: '#f6c9a3', e: '#1a1420', r: '#f39aa8', w: '#ffffff', t: '#e04848', j: '#34437a', p: '#3d3a4f', b: '#1b1724', c: '#9a6234', C: '#5e3b1f' };
+const BODY = [
+  ['k', 3, 0, 6, 1], ['k', 2, 1, 7, 1], ['k', 2, 2, 2, 3], ['s', 4, 2, 5, 4], ['k', 8, 2, 1, 1],
+  ['e', 7, 3, 1, 1], ['r', 8, 4, 1, 1],
+  ['w', 5, 6, 3, 1], ['t', 6, 6, 1, 1],
+  ['j', 3, 7, 6, 4], ['w', 5, 7, 2, 2], ['t', 6, 7, 1, 3],
+  ['p', 4, 11, 4, 1],
+];
+const IDLE = [
+  ['p', 4, 12, 2, 3], ['p', 6, 12, 2, 3], ['b', 4, 15, 2, 1], ['b', 6, 15, 3, 1],
+  ['j', 9, 7, 1, 3], ['s', 9, 10, 1, 1], ['C', 9, 11, 2, 1], ['c', 8, 12, 4, 3],
+];
+const RUN0 = [
+  ['p', 6, 12, 2, 1], ['p', 7, 13, 2, 1], ['p', 8, 14, 2, 1], ['b', 9, 15, 3, 1],
+  ['p', 4, 12, 2, 1], ['p', 3, 13, 2, 1], ['b', 1, 14, 3, 1],
+  ['j', 9, 8, 2, 1], ['s', 11, 8, 1, 1],
+  ['j', 2, 8, 2, 2], ['s', 1, 10, 1, 1], ['C', 0, 11, 2, 1], ['c', -1, 12, 3, 2],
+];
+const RUN1 = [
+  ['p', 5, 12, 2, 3], ['b', 5, 15, 3, 1],
+  ['p', 3, 12, 2, 2], ['b', 2, 14, 2, 1],
+  ['j', 8, 8, 1, 2], ['s', 8, 10, 1, 1], ['C', 8, 11, 2, 1], ['c', 7, 12, 3, 2],
+];
+const RUN2 = [
+  ['p', 5, 12, 2, 1], ['p', 4, 13, 2, 1], ['p', 3, 14, 2, 1], ['b', 1, 15, 3, 1],
+  ['p', 7, 12, 2, 1], ['p', 8, 13, 2, 1], ['b', 9, 14, 3, 1],
+  ['j', 2, 8, 1, 2],
+  ['j', 9, 8, 2, 2], ['s', 11, 9, 1, 1], ['C', 11, 10, 2, 1], ['c', 10, 11, 3, 2],
+];
+const RUN = [RUN0, RUN1, RUN2, RUN1];
+
+function drawSprite(g, x, y, parts) {
+  for (const [c, dx, dy, w, h] of parts) { g.fillStyle = PAL[c]; g.fillRect(x + dx, y + dy, w, h); }
+}
+
+let dust = [], lastDust = 0;
+function drawStage(ts, tms) {
+  sctx.drawImage(stageStatic, 0, 0);
+
+  // 갈매기
+  sctx.fillStyle = '#3b2a4a';
+  for (let i = 0; i < 2; i++) {
+    const bx = Math.floor((ts / 1000 * (6 + i * 3) + i * 90) % 240) - 20;
+    const by = 14 + i * 8 + Math.round(Math.sin(ts / 400 + i));
+    const up = Math.floor(ts / 250 + i) % 2 ? -1 : 1;
+    sctx.fillRect(bx, by, 2, 1); sctx.fillRect(bx - 1, by + up, 1, 1); sctx.fillRect(bx + 2, by + up, 1, 1);
+  }
+
+  // 위치: 지수적으로 가까워지지만 END_X를 절대 넘지 못함
+  const p = 1 - Math.exp(-tms / 1000 / TAU);
+  const cx = Math.floor(START_X + (END_X - START_X) * p);
+  let parts = IDLE, bob = 0;
+  if (running) {
+    const f = Math.floor(ts / 90) % 4;
+    parts = RUN[f]; bob = f % 2 ? -1 : 0;
+  }
+  const cy = GY - 16 + bob;
+
+  // 먼지
+  if (running && ts - lastDust > 110) { dust.push({ x: cx + 3, y: GY - 1, a: 1 }); lastDust = ts; }
+  dust = dust.filter(d => d.a > 0);
+  for (const d of dust) {
+    d.x -= 0.6; d.y -= 0.15; d.a -= 0.08;
+    sctx.globalAlpha = Math.max(0, d.a); sctx.fillStyle = '#cdbfa5';
+    sctx.fillRect(Math.floor(d.x), Math.floor(d.y), 2, 1);
+  }
+  sctx.globalAlpha = 1;
+
+  // 그림자
+  sctx.fillStyle = 'rgba(70,40,60,.25)'; sctx.fillRect(cx + 2, GY, 9, 1);
+
+  drawSprite(sctx, cx, cy, BODY);
+  drawSprite(sctx, cx, cy, parts);
+
+  if (running) {
+    // 속도선 + 땀방울
+    if (Math.floor(ts / 150) % 2) {
+      sctx.fillStyle = 'rgba(255,255,255,.6)';
+      sctx.fillRect(cx - 4, cy + 7, 2, 1); sctx.fillRect(cx - 5, cy + 10, 3, 1);
+    }
+    if (p > 0.4 && Math.floor(ts / 300) % 2) { sctx.fillStyle = '#8fd3ff'; sctx.fillRect(cx + 1, cy + 1, 1, 2); }
+  }
+}
+
+/* ---------- 남은 거리 (로그 공간에서 계산 → 0이 되지 않음) ---------- */
+const D0_LOG = Math.log10(60000); // 홍콩→마카오 약 60km
+const UNITS = [['km', 3], ['m', 0], ['cm', -2], ['mm', -3], ['μm', -6], ['nm', -9], ['pm', -12], ['fm', -15], ['am', -18], ['zm', -21], ['ym', -24]];
+const SUP = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+function remainingLog(tms) { return D0_LOG - tms / 1000 / (TAU * Math.LN10); }
+function formatDist(L) {
+  for (const [u, e] of UNITS) {
+    if (L >= e) { const v = Math.pow(10, L - e); return v.toFixed(v < 10 ? 3 : 2) + ' ' + u; }
+  }
+  const e = Math.floor(L), m = Math.pow(10, L - e);
+  return m.toFixed(2) + ' × 10' + String(e).split('').map(ch => SUP[ch]).join('') + ' m';
+}
+function quipFor(tms, L, p) {
+  if (tms === 0) return '퇴근 완료! 마카오 휴가 출발 대기 중 ✈';
+  if (!running) return '잠깐 숨 고르는 중… 헉헉';
+  if (L < -34.79) return '플랑크 길이 돌파. 제논이 웃고 있다';
+  if (L < -10) return '원자보다 가까운데… 왜 아직이지?';
+  if (L < -3) return '1mm도 안 남았는데…!';
+  if (L < 0) return '바로 코앞이야! 한 발만 더…';
+  if (L < 2) return '이제 100m도 안 남았다!';
+  if (p < 0.3) return '마카오로 출발! 에그타르트 기다려!';
+  if (p < 0.6) return '성 바울 성당이 보인다…!';
+  if (p < 0.85) return '조금만 더 달리면…';
+  return '거의 다 왔어…!';
+}
+
+/* ---------- 스탑워치 ---------- */
+const display = $('display'), startBtn = $('startBtn'), lapBtn = $('lapBtn'), lapList = $('laps');
+const distEl = $('dist'), quipEl = $('quip');
+
+let running = false, startTime = 0, elapsed = 0, lastLapTotal = 0, laps = [];
+
+function format(ms) {
+  const totalCs = Math.floor(ms / 10);
+  const cs = totalCs % 100, s = Math.floor(totalCs / 100) % 60, m = Math.floor(totalCs / 6000) % 60, h = Math.floor(totalCs / 360000);
+  const pad = n => String(n).padStart(2, '0');
+  return (h ? h + ':' : '') + pad(m) + ':' + pad(s) + '.' + pad(cs);
+}
+function now() { return running ? elapsed + (performance.now() - startTime) : elapsed; }
+
+function renderLaps() {
+  lapList.innerHTML = '';
+  if (running || elapsed > 0) {
+    const li = document.createElement('li');
+    li.className = 'current';
+    li.innerHTML = `<span>랩 ${laps.length + 1}</span><span>${format(now() - lastLapTotal)}</span>`;
+    lapList.appendChild(li);
+  }
+  let best = -1, worst = -1;
+  if (laps.length >= 2) { best = laps.indexOf(Math.min(...laps)); worst = laps.indexOf(Math.max(...laps)); }
+  for (let i = laps.length - 1; i >= 0; i--) {
+    const li = document.createElement('li');
+    if (i === best) li.className = 'best'; else if (i === worst) li.className = 'worst';
+    li.innerHTML = `<span>랩 ${i + 1}</span><span>${format(laps[i])}</span>`;
+    lapList.appendChild(li);
+  }
+}
+
+function toggle() {
+  if (running) {
+    elapsed = now(); running = false;
+    startBtn.textContent = '시작'; startBtn.classList.remove('running');
+    lapBtn.textContent = '리셋';
+  } else {
+    startTime = performance.now(); running = true;
+    startBtn.textContent = '정지'; startBtn.classList.add('running');
+    lapBtn.textContent = '랩'; lapBtn.disabled = false;
+    if (!lapList.querySelector('li.current')) renderLaps();
+  }
+}
+function lap() {
+  if (!running) return;
+  const t = now(); laps.push(t - lastLapTotal); lastLapTotal = t; renderLaps();
+}
+function reset() {
+  if (running) return;
+  elapsed = 0; lastLapTotal = 0; laps = []; dust = [];
+  display.textContent = format(0);
+  lapList.innerHTML = '';
+  lapBtn.textContent = '랩'; lapBtn.disabled = true;
+}
+
+startBtn.addEventListener('click', () => { toggle(); startBtn.blur(); });
+lapBtn.addEventListener('click', () => { running ? lap() : reset(); lapBtn.blur(); });
+document.addEventListener('keydown', e => {
+  if (e.repeat) return;
+  if (e.code === 'Space') { e.preventDefault(); toggle(); }
+  else if (e.key === 'l' || e.key === 'L') lap();
+  else if (e.key === 'r' || e.key === 'R') reset();
+});
+
+/* ---------- 메인 루프 ---------- */
+let lastBg = -1e9, lastStage = -1e9;
+function loop(ts) {
+  const t = now();
+  if (running) {
+    display.textContent = format(t);
+    const cur = lapList.querySelector('li.current span:last-child');
+    if (cur) cur.textContent = format(t - lastLapTotal);
+  }
+  if (ts - lastBg > 100) { drawBg(ts / 1000); lastBg = ts; }
+  if (ts - lastStage > 50) {
+    drawStage(ts, t); lastStage = ts;
+    const L = remainingLog(t), p = 1 - Math.exp(-t / 1000 / TAU);
+    const ds = formatDist(L), q = quipFor(t, L, p);
+    if (distEl.textContent !== ds) distEl.textContent = ds;
+    if (quipEl.textContent !== q) quipEl.textContent = q;
+  }
+  requestAnimationFrame(loop);
+}
+
+let resizeTimer;
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { buildBg(); lastBg = -1e9; }, 150); });
+buildBg();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
